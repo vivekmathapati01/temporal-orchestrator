@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 @activity.defn(name="prepare_media_plan_activity")
 async def prepare_media_plan_activity(creative_output: Dict[str, Any]) -> Dict[str, Any]:
-    """Prepare media plan from creative outputs."""
+    """Prepare media plan from creative outputs. This can be human udgesting media buying strategy."""
     logger.info(f"Hello from prepare_media_plan_activity with creative_output: {creative_output}")
     return {
         "status": "success",

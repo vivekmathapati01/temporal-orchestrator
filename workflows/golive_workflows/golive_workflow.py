@@ -1,64 +1,20 @@
-"""GoLive workflow and sub-workflows."""
+"""Main GoLive workflow."""
 
+import logging
 from temporalio import workflow
 from temporalio.common import RetryPolicy
 from datetime import timedelta
 from typing import Dict, Any
-import logging
 
 with workflow.unsafe.imports_passed_through():
     from activities.golive_activities import (
         prepare_media_plan_activity,
         summarise_media_buy_report_activity,
-        media_buying_activity,
-        deployment_activity,
     )
+    from workflows.golive_workflows.media_buying_workflow import MediaBuyingWorkflow
+    from workflows.golive_workflows.deployment_workflow import DeploymentWorkflow
 
 logger = logging.getLogger(__name__)
-
-
-@workflow.defn(name="MediaBuyingWorkflow")
-class MediaBuyingWorkflow:
-    """Sub-workflow for media buying."""
-
-    @workflow.run
-    async def run(self, media_plan: Dict[str, Any]) -> Dict[str, Any]:
-        """Execute media buying workflow."""
-        workflow.logger.info("Starting MediaBuyingWorkflow")
-
-        result = await workflow.execute_activity(
-            media_buying_activity,
-            media_plan,
-            start_to_close_timeout=timedelta(minutes=10),
-            retry_policy=RetryPolicy(
-                maximum_attempts=3,
-                initial_interval=timedelta(seconds=1),
-            ),
-        )
-
-        return result
-
-
-@workflow.defn(name="DeploymentWorkflow")
-class DeploymentWorkflow:
-    """Sub-workflow for campaign deployment."""
-
-    @workflow.run
-    async def run(self, deployment_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Execute deployment workflow."""
-        workflow.logger.info("Starting DeploymentWorkflow")
-
-        result = await workflow.execute_activity(
-            deployment_activity,
-            deployment_data,
-            start_to_close_timeout=timedelta(minutes=10),
-            retry_policy=RetryPolicy(
-                maximum_attempts=3,
-                initial_interval=timedelta(seconds=1),
-            ),
-        )
-
-        return result
 
 
 @workflow.defn(name="GoLiveWorkflow")
@@ -104,9 +60,21 @@ class GoLiveWorkflow:
             ),
         )
 
+        media_buy_output = {
+            "media_buy_result": media_buy_result,
+            "media_buy_summary": media_buy_summary,
+        }
+
         # Step 4: Human-in-the-middle - Wait for approval signal
         workflow.logger.info("Waiting for media buy approval signal...")
         await workflow.wait_condition(lambda: self.approval_status != "pending")
+
+        # rerun media buy if feedback is provided
+        if self.approval_status == "feedback":
+            workflow.logger.info(f"Feedback received: {self.approval_feedback}")
+            # Reset approval status to pending for next iteration
+            self.approval_status = "pending"
+            return await self.run(creative_output) # Restart the workflow with the same creative output & feedback
 
         if self.approval_status == "rejected":
             workflow.logger.warning(f"Media buy rejected: {self.approval_feedback}")
@@ -115,14 +83,13 @@ class GoLiveWorkflow:
         workflow.logger.info("Media buy approved! Proceeding to deployment...")
 
         # Step 5: Execute DeploymentWorkflow
-        deployment_data = {
-            "media_buy": media_buy_summary,
-            "creatives": creative_output,
-        }
+        if self.approval_status == "approved":
+            logger.info("Media buy approved, starting deployment workflow.")
+
 
         deployment_result = await workflow.execute_child_workflow(
             DeploymentWorkflow.run,
-            deployment_data,
+            media_buy_output,
             id=f"{workflow.info().workflow_id}-deployment",
             task_queue=workflow.info().task_queue,
         )
@@ -134,21 +101,30 @@ class GoLiveWorkflow:
             "approval_feedback": self.approval_feedback,
         }
 
-    @workflow.signal
+
+
+    @workflow.signal(name="provide_feedback")
+    async def provide_feedback(self, feedback: str) -> None:
+        """Signal to provide feedback on media buy."""
+        workflow.logger.info("Feedback received via signal")
+        self.approval_status = "feedback"
+        self.approval_feedback = feedback
+
+    @workflow.signal(name="approve_media_buy")
     async def approve_media_buy(self, feedback: str = "") -> None:
         """Signal to approve media buy."""
         workflow.logger.info("Media buy approved via signal")
         self.approval_status = "approved"
         self.approval_feedback = feedback
 
-    @workflow.signal
+    @workflow.signal(name="reject_media_buy")
     async def reject_media_buy(self, feedback: str = "") -> None:
         """Signal to reject media buy."""
         workflow.logger.info("Media buy rejected via signal")
         self.approval_status = "rejected"
         self.approval_feedback = feedback
 
-    @workflow.query
+    @workflow.query(name="get_approval_status")
     def get_approval_status(self) -> str:
         """Query to get current approval status."""
         return self.approval_status

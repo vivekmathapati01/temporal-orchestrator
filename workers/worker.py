@@ -8,11 +8,10 @@ from pathlib import Path
 # Add project root to path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
-
-from temporalio.client import Client
 from temporalio.worker import Worker
 
-from config import settings
+from client.temporal_client import get_temporal_client
+from config.settings import settings
 from workflows import (
     MarketingOrchestratorWorkflow,
     ResearcherWorkflow,
@@ -68,13 +67,9 @@ async def main():
     logger.info("Starting Temporal worker...")
     logger.info(f"Connecting to Temporal server at {settings.temporal_host}")
 
-    # Connect to Temporal server
-    client = await Client.connect(
-        settings.temporal_host,
-        namespace=settings.temporal_namespace,
-    )
+    # Get Temporal client (reusable singleton)
+    client = await get_temporal_client()
 
-    logger.info(f"Connected to Temporal namespace: {settings.temporal_namespace}")
     logger.info(f"Task queue: {settings.temporal_task_queue}")
 
     # Create worker with all workflows and activities

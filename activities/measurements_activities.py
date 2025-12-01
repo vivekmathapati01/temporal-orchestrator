@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 @activity.defn(name="fetch_previous_metrics_activity")
 async def fetch_previous_metrics_activity(campaign_id: str) -> Dict[str, Any]:
-    """Fetch previous metrics for the campaign."""
+    """Fetch previous metrics for the campaign. get data for given campaign id"""
     logger.info(f"Hello from fetch_previous_metrics_activity with campaign_id: {campaign_id}")
     return {
         "status": "success",

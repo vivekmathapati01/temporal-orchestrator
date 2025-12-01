@@ -6,10 +6,10 @@ from typing import Dict, Any
 import logging
 
 with workflow.unsafe.imports_passed_through():
-    from workflows.researcher_workflow import ResearcherWorkflow
-    from workflows.creative_workflow import CreativeWorkflow
-    from workflows.golive_workflow import GoLiveWorkflow
-    from workflows.measurements_workflow import MeasurementsWorkflow
+    from workflows.researcher_workflows.researcher_workflow import ResearcherWorkflow
+    from workflows.creatives_workflows.creative_workflow import CreativeWorkflow
+    from workflows.golive_workflows.golive_workflow import GoLiveWorkflow
+    from workflows.measuements_workflows.measurements_workflow import MeasurementsWorkflow
 
 logger = logging.getLogger(__name__)
 

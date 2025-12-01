@@ -20,8 +20,12 @@ fi
 
 echo "✓ Poetry is available"
 
-# Navigate to project root
-cd "$(dirname "$0")/.."
+# Navigate to project root (parent of scripts directory)
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+cd "$PROJECT_ROOT"
+
+echo "✓ Working directory: $PROJECT_ROOT"
 
 # Check if dependencies are installed
 if [ ! -f "poetry.lock" ]; then

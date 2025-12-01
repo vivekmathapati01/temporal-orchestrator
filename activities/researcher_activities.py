@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 @activity.defn(name="compile_research_input_activity")
 async def compile_research_input_activity(campaign_data: Dict[str, Any]) -> Dict[str, Any]:
-    """Compile research inputs from campaign data."""
+    """Compile research inputs from campaign data. This fetch data from various data sources."""
     logger.info(f"Hello from compile_research_input_activity with campaign_data: {campaign_data}")
     return {
         "status": "success",

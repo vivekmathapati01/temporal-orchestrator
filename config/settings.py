@@ -36,6 +36,11 @@ class Settings(BaseSettings):
     temporal_namespace: str = "default"
     temporal_task_queue: str = "marketing-orchestrator-queue"
 
+    # TLS Configuration (optional)
+    temporal_tls_enabled: bool = False
+    temporal_client_cert: str | None = None
+    temporal_client_key: str | None = None
+
     # Logging Configuration
     # Using Literal ensures only valid log levels are accepted
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"

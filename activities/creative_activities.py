@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 @activity.defn(name="prepare_creative_inputs_activity")
 async def prepare_creative_inputs_activity(research_output: Dict[str, Any]) -> Dict[str, Any]:
-    """Prepare creative inputs from research output."""
+    """Prepare creative inputs from research output. this is our prompt writer for creatives"""
     logger.info(f"Hello from prepare_creative_inputs_activity with research_output: {research_output}")
     return {
         "status": "success",

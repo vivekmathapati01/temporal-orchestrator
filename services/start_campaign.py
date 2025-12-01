@@ -9,8 +9,8 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from temporalio.client import Client
-from config import settings
+from client.temporal_client import get_temporal_client
+from config.settings import settings
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -18,11 +18,8 @@ logger = logging.getLogger(__name__)
 
 async def start_campaign():
     """Start a marketing campaign workflow."""
-    # Connect to Temporal
-    client = await Client.connect(
-        settings.temporal_host,
-        namespace=settings.temporal_namespace,
-    )
+    # Get Temporal client (reusable singleton)
+    client = await get_temporal_client()
 
     # Define campaign input
     campaign_input = {

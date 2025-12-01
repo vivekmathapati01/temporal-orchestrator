@@ -1,64 +1,17 @@
-"""Researcher workflow and sub-workflows."""
+"""Main researcher workflow."""
 
 from temporalio import workflow
 from temporalio.common import RetryPolicy
 from datetime import timedelta
 from typing import Dict, Any
-import logging
-
+from dataclasses import dataclass
 with workflow.unsafe.imports_passed_through():
     from activities.researcher_activities import (
         compile_research_input_activity,
         summarise_research_findings_activity,
-        research_brief_activity,
-        research_concept_note_activity,
     )
-
-logger = logging.getLogger(__name__)
-
-
-@workflow.defn(name="ResearchBriefWorkflow")
-class ResearchBriefWorkflow:
-    """Sub-workflow for generating research brief."""
-
-    @workflow.run
-    async def run(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Execute research brief workflow."""
-        workflow.logger.info("Starting ResearchBriefWorkflow")
-
-        result = await workflow.execute_activity(
-            research_brief_activity,
-            input_data,
-            start_to_close_timeout=timedelta(minutes=5),
-            retry_policy=RetryPolicy(
-                maximum_attempts=3,
-                initial_interval=timedelta(seconds=1),
-            ),
-        )
-
-        return result
-
-
-@workflow.defn(name="ResearchConceptNoteWorkflow")
-class ResearchConceptNoteWorkflow:
-    """Sub-workflow for generating research concept note."""
-
-    @workflow.run
-    async def run(self, brief_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Execute research concept note workflow."""
-        workflow.logger.info("Starting ResearchConceptNoteWorkflow")
-
-        result = await workflow.execute_activity(
-            research_concept_note_activity,
-            brief_data,
-            start_to_close_timeout=timedelta(minutes=5),
-            retry_policy=RetryPolicy(
-                maximum_attempts=3,
-                initial_interval=timedelta(seconds=1),
-            ),
-        )
-
-        return result
+    from workflows.researcher_workflows.research_brief_workflow import ResearchBriefWorkflow
+    from workflows.researcher_workflows.research_concept_note_workflow import ResearchConceptNoteWorkflow
 
 
 @workflow.defn(name="ResearcherWorkflow")
@@ -112,36 +65,58 @@ class ResearcherWorkflow:
             ),
         )
 
+        researcher_output = {
+            "research_brief": brief_result,
+            "concept_note": concept_note_result,
+            "research_findings": research_findings,
+        }
+
         # Step 5: Human-in-the-middle - Wait for approval signal
         workflow.logger.info("Waiting for research approval signal...")
-        await workflow.wait_condition(lambda: self.approval_status != "pending")
+        await workflow.wait_condition(
+            lambda: self.approval_status != "pending",
+            timeout=timedelta(hours=24)
+        )
+
+        # Rerun workflow with feedback
+        if self.approval_status == "feedback":
+            workflow.logger.info(f"Research feedback received: {self.approval_feedback}")
+            return await self.run(campaign_data)
+
+        if self.approval_status == "approved":
+            workflow.logger.info("Research approved!")
+            return {
+                "status": "approved",
+                "approval_feedback": self.approval_feedback,
+                "research_outputs": researcher_output,
+            }
 
         if self.approval_status == "rejected":
             workflow.logger.warning(f"Research rejected: {self.approval_feedback}")
             raise Exception(f"Research rejected: {self.approval_feedback}")
 
-        workflow.logger.info("Research approved!")
-        return {
-            "status": "approved",
-            "research_findings": research_findings,
-            "approval_feedback": self.approval_feedback,
-        }
+    @workflow.signal(name="provide_feedback")
+    async def provide_feedback(self, feedback: str = "") -> None:
+        """Signal to provide feedback on research."""
+        workflow.logger.info("Feedback provided via signal")
+        self.approval_status = "feedback"
+        self.approval_feedback = feedback
 
-    @workflow.signal
+    @workflow.signal(name="approve_research")
     async def approve_research(self, feedback: str = "") -> None:
         """Signal to approve research."""
-        workflow.logger.info("Research approved via signal")
+        workflow.logger.info("Researcher approved via signal")
         self.approval_status = "approved"
         self.approval_feedback = feedback
 
-    @workflow.signal
+    @workflow.signal(name="reject_research")
     async def reject_research(self, feedback: str = "") -> None:
         """Signal to reject research."""
-        workflow.logger.info("Research rejected via signal")
+        workflow.logger.info("Researcher rejected via signal")
         self.approval_status = "rejected"
         self.approval_feedback = feedback
 
-    @workflow.query
+    @workflow.query(name="get_approval_status")
     def get_approval_status(self) -> str:
         """Query to get current approval status."""
         return self.approval_status

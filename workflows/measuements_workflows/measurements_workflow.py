@@ -1,64 +1,17 @@
-"""Measurements workflow and sub-workflows."""
+"""Main measurements workflow."""
 
 from temporalio import workflow
 from temporalio.common import RetryPolicy
 from datetime import timedelta
 from typing import Dict, Any
-import logging
 
 with workflow.unsafe.imports_passed_through():
     from activities.measurements_activities import (
         fetch_previous_metrics_activity,
         aggregate_measurements_activity,
-        poll_measurements_activity,
-        retrieval_activity,
     )
-
-logger = logging.getLogger(__name__)
-
-
-@workflow.defn(name="PollMeasurementsWorkflow")
-class PollMeasurementsWorkflow:
-    """Sub-workflow for polling measurements."""
-
-    @workflow.run
-    async def run(self, deployment_id: str) -> Dict[str, Any]:
-        """Execute poll measurements workflow."""
-        workflow.logger.info("Starting PollMeasurementsWorkflow")
-
-        result = await workflow.execute_activity(
-            poll_measurements_activity,
-            deployment_id,
-            start_to_close_timeout=timedelta(minutes=5),
-            retry_policy=RetryPolicy(
-                maximum_attempts=3,
-                initial_interval=timedelta(seconds=1),
-            ),
-        )
-
-        return result
-
-
-@workflow.defn(name="RetrievalWorkflow")
-class RetrievalWorkflow:
-    """Sub-workflow for retrieving measurements."""
-
-    @workflow.run
-    async def run(self, measurement_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Execute retrieval workflow."""
-        workflow.logger.info("Starting RetrievalWorkflow")
-
-        result = await workflow.execute_activity(
-            retrieval_activity,
-            measurement_data,
-            start_to_close_timeout=timedelta(minutes=5),
-            retry_policy=RetryPolicy(
-                maximum_attempts=3,
-                initial_interval=timedelta(seconds=1),
-            ),
-        )
-
-        return result
+    from workflows.measuements_workflows.poll_measurements_workflow import PollMeasurementsWorkflow
+    from workflows.measuements_workflows.retrieval_workflow import RetrievalWorkflow
 
 
 @workflow.defn(name="MeasurementsWorkflow")
@@ -115,6 +68,13 @@ class MeasurementsWorkflow:
         workflow.logger.info("Waiting for measurements approval signal...")
         await workflow.wait_condition(lambda: self.approval_status != "pending")
 
+        #step 4: Handle approval decision
+
+        # rerun if feedback
+        if self.approval_status == "feedback":
+            workflow.logger.info(f"Feedback received: {self.approval_feedback}. Rerunning measurements aggregation...")
+            return await self.run(deployment_output)  # Rerun the workflow with the same deployment output
+
         if self.approval_status == "rejected":
             workflow.logger.warning(f"Measurements rejected: {self.approval_feedback}")
             raise Exception(f"Measurements rejected: {self.approval_feedback}")
@@ -136,21 +96,28 @@ class MeasurementsWorkflow:
             "approval_feedback": self.approval_feedback,
         }
 
-    @workflow.signal
+    @workflow.signal(name="provide_feedback")
+    async def provide_feedback(self, feedback: str = "") -> None:
+        """Signal to provide feedback on measurements."""
+        workflow.logger.info("Feedback received via signal")
+        self.approval_status = "feedback"
+        self.approval_feedback = feedback
+
+    @workflow.signal(name="approve_measurements")
     async def approve_measurements(self, feedback: str = "") -> None:
         """Signal to approve measurements."""
         workflow.logger.info("Measurements approved via signal")
         self.approval_status = "approved"
         self.approval_feedback = feedback
 
-    @workflow.signal
+    @workflow.signal(name="reject_measurements")
     async def reject_measurements(self, feedback: str = "") -> None:
         """Signal to reject measurements."""
         workflow.logger.info("Measurements rejected via signal")
         self.approval_status = "rejected"
         self.approval_feedback = feedback
 
-    @workflow.query
+    @workflow.query(name="get_approval_status")
     def get_approval_status(self) -> str:
         """Query to get current approval status."""
         return self.approval_status
