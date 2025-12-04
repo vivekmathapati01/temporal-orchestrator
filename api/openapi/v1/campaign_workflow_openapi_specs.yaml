@@ -1,0 +1,327 @@
+openapi: 3.0.0
+info:
+  title: Temporal Workflow API
+  version: 0.1.0
+  description: API for starting and managing Temporal workflows
+
+servers:
+  - url: http://localhost:8000
+    description: Local development server
+
+paths:
+  /api/v1/workflows/start:
+    post:
+      summary: Start a workflow
+      description: Start a new Temporal workflow
+      operationId: startWorkflow
+      tags:
+        - Workflows
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StartWorkflowRequest'
+            example:
+              campaign_name: Spring Launch
+              budget: 100000
+              objectives:
+                - Increase awareness
+              channels:
+                - email
+                - sms
+      responses:
+        '200':
+          description: Workflow started successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StartWorkflowResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/workflows/signal:
+    post:
+      summary: Send signal to workflow
+      description: Send a signal to a running workflow
+      operationId: signalWorkflow
+      tags:
+        - Workflows
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignalWorkflowRequest'
+            examples:
+              approve_research:
+                summary: Approve research phase
+                value:
+                  workflow_id: spring-launch-1e13946d-researcher
+                  signal_name: approve_research
+                  signal_input: Research looks good!
+              reject_research:
+                summary: Reject research phase
+                value:
+                  workflow_id: spring-launch-1e13946d-researcher
+                  signal_name: reject_research
+                  signal_input: Please revise the target audience
+              provide_feedback:
+                summary: Provide feedback
+                value:
+                  workflow_id: spring-launch-1e13946d-creative
+                  signal_name: provide_feedback
+                  signal_input: Consider adding more vibrant colors
+      responses:
+        '200':
+          description: Signal sent successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SignalWorkflowResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  schemas:
+    StartWorkflowRequest:
+      type: object
+      required:
+        - campaign_name
+        - budget
+        - objectives
+        - channels
+      properties:
+        campaign_name:
+          type: string
+          description: Name of the marketing campaign
+          example: Spring Launch
+        budget:
+          type: number
+          description: Campaign budget
+          example: 100000
+        objectives:
+          type: array
+          description: Campaign objectives
+          items:
+            type: string
+          example:
+            - Increase awareness
+        channels:
+          type: array
+          description: Marketing channels
+          items:
+            type: string
+          example:
+            - email
+            - sms
+
+    StartWorkflowResponse:
+      type: object
+      required:
+        - workflow_id
+        - run_id
+        - message
+      properties:
+        workflow_id:
+          type: string
+          description: The workflow identifier
+          example: campaign-001
+        run_id:
+          type: string
+          description: The workflow run identifier
+          example: 8303fc92-ee93-4739-8ddf-792d92b86393
+        message:
+          type: string
+          description: Success message
+          example: Workflow started successfully
+
+    SignalWorkflowRequest:
+      type: object
+      required:
+        - workflow_id
+        - signal_name
+      properties:
+        workflow_id:
+          type: string
+          description: ID of the workflow to send signal to
+          example: spring-launch-1e13946d-researcher
+        signal_name:
+          type: string
+          description: Name of the signal to send
+          enum:
+            - approve_research
+            - reject_research
+            - approve_creatives
+            - reject_creatives
+            - approve_media_buy
+            - reject_media_buy
+            - approve_measurements
+            - reject_measurements
+            - provide_feedback
+          example: approve_research
+        signal_input:
+          description: Optional input data for the signal
+          example: Looks good!
+
+    SignalWorkflowResponse:
+      type: object
+      required:
+        - workflow_id
+        - signal_name
+        - message
+      properties:
+        workflow_id:
+          type: string
+          description: The workflow identifier
+          example: spring-launch-1e13946d-researcher
+        signal_name:
+          type: string
+          description: Name of the signal that was sent
+          example: approve_research
+        message:
+          type: string
+          description: Success message
+          example: Signal sent successfully
+
+    WorkflowInfo:
+      type: object
+      required:
+        - workflow_id
+        - run_id
+        - workflow_type
+        - status
+      properties:
+        workflow_id:
+          type: string
+          description: The workflow identifier
+          example: spring-launch-1e13946d
+        run_id:
+          type: string
+          description: The workflow run identifier
+          example: 8303fc92-ee93-4739-8ddf-792d92b86393
+        workflow_type:
+          type: string
+          description: Type of the workflow
+          example: MarketingOrchestratorWorkflow
+        status:
+          type: string
+          description: Current status of the workflow
+          enum:
+            - RUNNING
+            - COMPLETED
+            - FAILED
+            - CANCELED
+            - TERMINATED
+            - CONTINUED_AS_NEW
+            - TIMED_OUT
+          example: RUNNING
+        start_time:
+          type: string
+          format: date-time
+          description: When the workflow started
+          example: "2025-12-05T10:30:00Z"
+
+    GetWorkflowsResponse:
+      type: object
+      required:
+        - workflows
+        - count
+        - message
+      properties:
+        workflows:
+          type: array
+          description: List of workflows
+          items:
+            $ref: '#/components/schemas/WorkflowInfo'
+        count:
+          type: integer
+          description: Number of workflows returned
+          example: 5
+        message:
+          type: string
+          description: Success message
+          example: Workflows retrieved successfully
+
+    WorkflowStatusResponse:
+      type: object
+      required:
+        - workflow_id
+        - run_id
+        - workflow_type
+        - status
+        - message
+      properties:
+        workflow_id:
+          type: string
+          description: The workflow identifier
+          example: spring-launch-1e13946d
+        run_id:
+          type: string
+          description: The workflow run identifier
+          example: 8303fc92-ee93-4739-8ddf-792d92b86393
+        workflow_type:
+          type: string
+          description: Type of the workflow
+          example: MarketingOrchestratorWorkflow
+        status:
+          type: string
+          description: Current status of the workflow
+          enum:
+            - RUNNING
+            - COMPLETED
+            - FAILED
+            - CANCELED
+            - TERMINATED
+            - CONTINUED_AS_NEW
+            - TIMED_OUT
+          example: RUNNING
+        start_time:
+          type: string
+          format: date-time
+          description: When the workflow started
+          example: "2025-12-05T10:30:00Z"
+        close_time:
+          type: string
+          format: date-time
+          description: When the workflow completed (if finished)
+          example: "2025-12-05T11:45:00Z"
+        execution_time:
+          type: string
+          description: Total execution time (if workflow is closed)
+          example: "1:15:00"
+        message:
+          type: string
+          description: Success message
+          example: Workflow status retrieved successfully
+
+    ErrorResponse:
+      type: object
+      required:
+        - detail
+      properties:
+        detail:
+          type: string
+          description: Error message
+          example: An error occurred
+
